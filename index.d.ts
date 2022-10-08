@@ -21,16 +21,7 @@ interface VpnOptions {
   remoteAddress?: string;
   ovpnString?: string;
   ovpnFileName?: string;
-  username?: string;
-  password?: string;
   assetsPath?: string;
-  notificationTitle?: string;
-  compatMode?: RNSimpleOpenvpn.CompatMode;
-  useLegacyProvider?: boolean;
-  useCustomConfig?: boolean;
-  customConfigOptions?: string;
-  allowedAppsVpn?: Array<string>;
-  allowedAppsVpnAreDisallowed?: boolean;
   providerBundleIdentifier: string;
   localizedDescription?: string;
 }
@@ -43,8 +34,8 @@ interface VpnEventParams {
 
 declare namespace RNSimpleOpenvpn {
   function connect(options: VpnOptions): Promise<void>;
+  function isVPNActive(): Promise<void>;
   function disconnect(): Promise<void>;
-  function getCurrentState(): Promise<VpnState>;
   function observeState(): Promise<void>;
   function stopObserveState(): Promise<void>;
   enum VpnState {
@@ -53,12 +44,6 @@ declare namespace RNSimpleOpenvpn {
     VPN_STATE_CONNECTED,
     VPN_STATE_DISCONNECTING,
     VPN_OTHER_STATE,
-  }
-  enum CompatMode {
-    MODERN_DEFAULTS,
-    OVPN_TWO_FIVE_PEER,
-    OVPN_TWO_FOUR_PEER,
-    OVPN_TWO_THREE_PEER,
   }
 }
 

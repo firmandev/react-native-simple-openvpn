@@ -21,18 +21,12 @@ package com.norcod.rnovpn;
 
 import static android.app.Activity.RESULT_OK;
 
-import android.app.Activity;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
-import android.net.VpnService;
 import android.os.Build;
-import android.os.IBinder;
-import android.os.RemoteException;
-import android.util.Log;
+import android.app.Activity;
+import android.content.Intent;
+import android.net.VpnService;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
+import android.util.Log;
 
 import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.Arguments;
@@ -47,13 +41,11 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import de.blinkt.openvpn.VpnProfile;
 import de.blinkt.openvpn.core.ConfigParser;
-import de.blinkt.openvpn.core.ConnectionStatus;
-import de.blinkt.openvpn.core.IOpenVPNServiceInternal;
-import de.blinkt.openvpn.core.OpenVPNService;
+import de.blinkt.openvpn.core.OpenVPNThread;
 import de.blinkt.openvpn.core.ProfileManager;
 import de.blinkt.openvpn.core.VPNLaunchHelper;
 import de.blinkt.openvpn.core.VpnStatus;
-import de.blinkt.openvpn.fragments.Utils;
+import de.blinkt.openvpn.core.VpnStatus.ConnectionStatus;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -65,12 +57,12 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@RequiresApi(api = Build.VERSION_CODES.N)
 public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements VpnStatus.StateListener {
 
   private String TAG = RNSimpleOpenvpnModule.class.getSimpleName();
   private HashMap<String, Object> ovpnOptions;
   private static final int START_VPN_PROFILE = 70;
+  private OpenVPNThread vpnThread = new OpenVPNThread();
   private VpnProfile vpnProfile;
   private Promise vpnPromise;
 
@@ -98,38 +90,13 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
     VPN_OTHER_STATE,
   }
 
-  private enum CompatMode {
-    MODERN_DEFAULTS,
-    OVPN_TWO_FIVE_PEER,
-    OVPN_TWO_FOUR_PEER,
-    OVPN_TWO_THREE_PEER,
-  }
-
   private static ReactApplicationContext reactContext;
-
-  private IOpenVPNServiceInternal mService;
-
-  private ServiceConnection mConnection = new ServiceConnection() {
-    @Override
-    public void onServiceConnected(ComponentName className, IBinder service) {
-      mService = (IOpenVPNServiceInternal)(service);
-    }
-
-    @Override
-    public void onServiceDisconnected(ComponentName arg0) {
-      mService = null;
-    }
-  };
 
   public RNSimpleOpenvpnModule(ReactApplicationContext context) {
     super(context);
     reactContext = context;
     reactContext.addActivityEventListener(mActivityEventListener);
     VpnStatus.addStateListener(this);
-
-    Intent intent = new Intent(context, OpenVPNService.class);
-    intent.setAction(OpenVPNService.START_SERVICE);
-    context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
   }
 
   @Override
@@ -141,19 +108,12 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
   public Map<String, Object> getConstants() {
     final Map<String, Object> constants = new HashMap<>();
     final Map<String, Object> vpnState = new HashMap<>();
-    final Map<String, Object> compatMode = new HashMap<>();
 
     for (VpnState state : VpnState.values()) {
       vpnState.put(state.toString(), state.ordinal());
     }
 
-    for (CompatMode mode : CompatMode.values()) {
-      compatMode.put(mode.toString(), mode.ordinal());
-    }
-
     constants.put("VpnState", vpnState);
-    constants.put("CompatMode", compatMode);
-
     return constants;
   }
 
@@ -182,21 +142,22 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
   }
 
   @ReactMethod
-  public void disconnect(Promise promise) {
+  public void isVPNActive(Promise promise) {
     try {
-      if (mService != null) {
-        mService.stopVPN(false);
-      }
-
-      promise.resolve(null);
+      promise.resolve(VpnStatus.isVPNActive());
     } catch (Exception e) {
-      promise.reject("E_STOP_OVPN_ERROR", "Stop ovpn failed: " + e.toString());
+      promise.reject("Oops Something wrong happened ");
     }
   }
 
   @ReactMethod
-  public void getCurrentState(Promise promise) {
-    promise.resolve(getVpnState(VpnStatus.getStatus()));
+  public void disconnect(Promise promise) {
+    try {
+      vpnThread.stop();
+      promise.resolve(null);
+    } catch (Exception e) {
+      promise.reject("E_STOP_OVPN_ERROR", "Stop ovpn failed: " + e.toString());
+    }
   }
 
   private void prepareVpn(final Promise promise) {
@@ -222,8 +183,16 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
     String config = "";
 
     try {
-      String remoteAddress = ovpnOptions.getOrDefault("remoteAddress", "").toString();
-      String ovpnString = ovpnOptions.getOrDefault("ovpnString", "").toString();
+      String remoteAddress = "";  
+      String ovpnString = "";   
+      if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
+          remoteAddress = ovpnOptions.getOrDefault("remoteAddress", "").toString();
+          ovpnString =  ovpnOptions.getOrDefault("ovpnString", "").toString();
+      } else {
+          remoteAddress = (ovpnOptions.get("remoteAddress") != null) ? ovpnOptions.get("remoteAddress").toString() : "" ;
+          ovpnString  = (ovpnOptions.get("ovpnString") != null) ? ovpnOptions.get("ovpnString").toString() : "";
+      }
+
 
       config = ovpnString.isEmpty() ? getOvpnFileContent() : ovpnString;
 
@@ -243,38 +212,15 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
     ConfigParser cp = new ConfigParser();
 
     try {
-      String username = ovpnOptions.getOrDefault("username", "").toString();
-      String password = ovpnOptions.getOrDefault("password", "").toString();
-      String notificationTitle = ovpnOptions.getOrDefault("notificationTitle", "OpenVPN").toString();
-      int compatMode = ovpnOptions.get("compatMode") != null ? ((Double)ovpnOptions.get("compatMode")).intValue()
-                                                             : CompatMode.MODERN_DEFAULTS.ordinal();
-      boolean useLegacyProvider = (boolean)ovpnOptions.getOrDefault("useLegacyProvider", false);
-      boolean useCustomConfig = (boolean)ovpnOptions.getOrDefault("useCustomConfig", false);
-      String customConfigOptions = ovpnOptions.getOrDefault("customConfigOptions", "").toString();
-      ArrayList<String> allowedAppsVpn =
-          (ArrayList<String>)ovpnOptions.getOrDefault("allowedAppsVpn", new ArrayList<>());
-      boolean allowedAppsVpnAreDisallowed = (boolean)ovpnOptions.getOrDefault("allowedAppsVpnAreDisallowed", true);
+      // String username = ovpnOptions.getOrDefault("username", "").toString();
+      // String password = ovpnOptions.getOrDefault("password", "").toString();
 
       cp.parseConfig(new StringReader(config));
       vpnProfile = cp.convertProfile();
-      vpnProfile.mUsername = username;
-      vpnProfile.mPassword = password;
-      vpnProfile.mName = notificationTitle;
-      vpnProfile.mCompatMode = Utils.mapCompatMode(compatMode);
-      vpnProfile.mUseLegacyProvider = useLegacyProvider;
-      vpnProfile.mUseCustomConfig = useCustomConfig;
-      vpnProfile.mCustomConfigOptions = customConfigOptions;
-      vpnProfile.mAllowedAppsVpnAreDisallowed = allowedAppsVpnAreDisallowed;
+      // vpnProfile.mUsername = username;
+      // vpnProfile.mPassword = password;
 
-      for (String pkgNames : allowedAppsVpn) {
-        vpnProfile.mAllowedAppsVpn.add(pkgNames);
-      }
-
-      if (vpnProfile.checkProfile(reactContext) != R.string.no_error_found) {
-        throw new RemoteException(reactContext.getString(vpnProfile.checkProfile(reactContext)));
-      }
-
-      ProfileManager.setTemporaryProfile(reactContext, vpnProfile);
+      ProfileManager.setTemporaryProfile(vpnProfile);
       VPNLaunchHelper.startOpenVpn(vpnProfile, reactContext);
       promise.resolve(null);
     } catch (Exception e) {
@@ -286,8 +232,19 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
 
   private String getOvpnFileContent() throws Exception {
     String content = "";
-    String assetsPath = ovpnOptions.getOrDefault("assetsPath", "").toString();
-    String ovpnFileName = ovpnOptions.getOrDefault("ovpnFileName", "client").toString();
+    String assetsPath = "";
+    String ovpnFileName = "";
+    
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        assetsPath = ovpnOptions.getOrDefault("assetsPath", "").toString();
+        ovpnFileName = ovpnOptions.getOrDefault("ovpnFileName", "client").toString();
+    } else {
+        assetsPath = (ovpnOptions.get("assetsPath") != null) ? ovpnOptions.get("assetsPath").toString() : ""  ;
+        ovpnFileName = (ovpnOptions.get("ovpnFileName") != null) ?  ovpnOptions.get("ovpnFileName").toString() : "client";
+    }
+
+
+
     String ovpnFilePath = assetsPath + ovpnFileName + ".ovpn";
 
     InputStream conf = reactContext.getAssets().open(ovpnFilePath);
@@ -316,15 +273,13 @@ public class RNSimpleOpenvpnModule extends ReactContextBaseJavaModule implements
   }
 
   @Override
-  public void updateState(String state, String logmessage, int localizedResId, ConnectionStatus level, Intent Intent) {
+  public void updateState(String state, String logmessage, int localizedResId, ConnectionStatus level) {
     WritableMap params = Arguments.createMap();
     params.putInt("state", getVpnState(level));
     params.putString("message", state);
     params.putString("level", level.toString());
     sendEvent("stateChanged", params);
   }
-
-  public void setConnectedVPN(String uuid) {}
 
   private int getVpnState(ConnectionStatus level) {
     VpnState state;
