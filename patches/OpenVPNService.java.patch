@@ -63,8 +63,8 @@ index f7b6515..84fedc6 100644
 -        Intent disconnectVPN = new Intent(this, DisconnectVPN.class);
 +        Intent disconnectVPN = new Intent(this, OpenVPNService.class);
          disconnectVPN.setAction(DISCONNECT_VPN);
--        PendingIntent disconnectPendingIntent = PendingIntent.getActivity(this, 0, disconnectVPN, PendingIntent.FLAG_IMMUTABLE);
-+        PendingIntent disconnectPendingIntent = PendingIntent.getService(this, 0, disconnectVPN, PendingIntent.FLAG_IMMUTABLE);
+-        PendingIntent disconnectPendingIntent = PendingIntent.getActivity(this, 0, disconnectVPN, PendingIntent.FLAG_MUTABLE);
++        PendingIntent disconnectPendingIntent = PendingIntent.getService(this, 0, disconnectVPN, PendingIntent.FLAG_MUTABLE);
  
          nbuilder.addAction(R.drawable.ic_menu_close_clear_cancel,
                  getString(R.string.cancel_connection), disconnectPendingIntent);

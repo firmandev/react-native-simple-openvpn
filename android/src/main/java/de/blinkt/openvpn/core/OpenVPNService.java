@@ -154,7 +154,7 @@ public class OpenVPNService extends VpnService implements StateListener, Callbac
 
         intent.putExtra("PAGE", "graph");
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        PendingIntent startLW = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent startLW = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_MUTABLE);
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         return startLW;
 
@@ -283,27 +283,27 @@ public class OpenVPNService extends VpnService implements StateListener, Callbac
 
             }
 
-            Intent disconnectVPN = new Intent(this, OpenVPNService.class);
-            disconnectVPN.setAction(DISCONNECT_VPN);
-            PendingIntent disconnectPendingIntent = PendingIntent.getService(
-                    this, 0, disconnectVPN, 0);
+            // Intent disconnectVPN = new Intent(this, OpenVPNService.class);
+            // disconnectVPN.setAction(DISCONNECT_VPN);
+            // PendingIntent disconnectPendingIntent = PendingIntent.getService(
+            //         this, 0, disconnectVPN, 0);
 
-            nbuilder.addAction(R.drawable.ic_menu_close_clear_cancel,
-                    getString(R.string.cancel_connection), disconnectPendingIntent);
+            // nbuilder.addAction(R.drawable.ic_menu_close_clear_cancel,
+            //         getString(R.string.cancel_connection), disconnectPendingIntent);
 
-            Intent pauseVPN = new Intent(this, OpenVPNService.class);
-            if (mDeviceStateReceiver == null || !mDeviceStateReceiver.isUserPaused()) {
-                pauseVPN.setAction(PAUSE_VPN);
-                PendingIntent pauseVPNPending = PendingIntent.getService(this, 0, pauseVPN, 0);
-                nbuilder.addAction(R.drawable.ic_menu_pause,
-                        getString(R.string.pauseVPN), pauseVPNPending);
+            // Intent pauseVPN = new Intent(this, OpenVPNService.class);
+            // if (mDeviceStateReceiver == null || !mDeviceStateReceiver.isUserPaused()) {
+            //     pauseVPN.setAction(PAUSE_VPN);
+            //     PendingIntent pauseVPNPending = PendingIntent.getService(this, 0, pauseVPN, 0);
+            //     nbuilder.addAction(R.drawable.ic_menu_pause,
+            //             getString(R.string.pauseVPN), pauseVPNPending);
 
-            } else {
-                pauseVPN.setAction(RESUME_VPN);
-                PendingIntent resumeVPNPending = PendingIntent.getService(this, 0, pauseVPN, 0);
-                nbuilder.addAction(R.drawable.ic_menu_play,
-                        getString(R.string.resumevpn), resumeVPNPending);
-            }
+            // } else {
+            //     pauseVPN.setAction(RESUME_VPN);
+            //     PendingIntent resumeVPNPending = PendingIntent.getService(this, 0, pauseVPN, 0);
+            //     nbuilder.addAction(R.drawable.ic_menu_play,
+            //             getString(R.string.resumevpn), resumeVPNPending);
+            // }
 
 
             //ignore exception
@@ -319,7 +319,7 @@ public class OpenVPNService extends VpnService implements StateListener, Callbac
             mContentIntent = new Intent(getBaseContext(), Intent.class);
         }
         //intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        return PendingIntent.getActivity(this, 0, mContentIntent, 0);
+        return PendingIntent.getActivity(this, 0, mContentIntent, PendingIntent.FLAG_MUTABLE);
     }
 
 
